@@ -102,7 +102,68 @@ results_df %>%
 
 # Problem 2
 
+```{r,message=FALSE,warning=FALSE}
+list.files(path ="data/.")
+dat_path = str_c("data/",list.files(path ="data/."))
+
+lgt_df = 
+  tibble(
+  obs = list.files(path ="data/.")
+) %>% 
+  mutate(
+    data = purrr::map(dat_path,read_csv)
+  ) %>% 
+  unnest(data) %>% 
+  separate(obs,into = c("arm","id","file")) %>% 
+  select(-file) %>% 
+   pivot_longer(
+    week_1:week_8,
+    names_to = "week",
+    names_prefix = "week_",
+    values_to = "value"
+  ) %>% 
+  mutate(week = as.numeric(week))
+  
+#make a plot
+lgt_df %>% 
+ ggplot(aes(x = week, y = value, color =id))+
+   facet_grid(. ~ arm)+
+  geom_line()+
+   labs(
+    title = "comparison between groups",
+    x = "week",
+    y = "value",
+    )
+  
+  
+```
+
+We can see from the plot that the value observed increased with time. The experiment group tends to have higher value than the control group.
+
+# Problem 3
+
 ```{r}
+set.seed(10)
+
+iris_with_missing = iris %>% 
+  map_df(~replace(.x, sample(1:150, 20), NA)) %>%
+  mutate(Species = as.character(Species))
+
+missing_replace = function(x) {
+ 
+  if(is.numeric(x)){
+   x =  replace_na(x,mean(x,na.rm = T ))
+    }
+  else if(is.character(x)){
+    x =replace_na(x,"virginica")
+  }
+}
+
+
+
+iris_with_replace=map(iris_with_missing, missing_replace)
+
+
 
 ```
 
