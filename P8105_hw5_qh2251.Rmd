@@ -33,62 +33,86 @@ scale_fill_discrete = scale_fill_viridis_d
 # read the data
 url_1 = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
 
-df = read_csv(url(url_1))
+df_raw = read_csv(url(url_1),na = c("","Unknown")) #age should be numeric,unknown should be na
 
-#create a city_state variable
+# #create a city_state variable
+# df = 
+#   df %>% 
+#   mutate(
+#     city = as.factor(city),
+#     city_state = as.factor(paste(city, state, sep=",")))%>%  #use #mutate(city_state = str_c(city,state))
+#   relocate(city_state) %>% 
+#   filter(city_state != "Tulsa_AL")
+
+#Jeff's version(use case when)
 df = 
-  df %>% 
+  df_raw %>% 
   mutate(
-    city = as.factor(city),
-    city_state = as.factor(paste(city, state, sep=",")))%>% 
-  filter(city_state != "Tulsa_AL")
+    city_state = str_c(city,state, sep=","),
+    resolution = case_when(
+      disposition == "Closed without arrest" ~ "unsolved",
+      disposition == "Open/No arrest" ~"unsolved",
+      disposition == "Closed by arrest" ~"solved"
+    )
+  ) %>% 
+  relocate(city_state) %>% 
+   filter(city_state != "Tulsa,AL")
 
-#create count of homicide
-df = 
-  df %>% 
-  group_by(city) %>% 
-  mutate(count = n()) 
+#resolution of crimes
+df_summary = df %>% 
+  group_by(city_state) %>% 
+  summarize(
+    unsolved = sum(resolution == "unsolved"),
+    n=n()
+  )
 
-#count unsolved cases
-unsolved = df %>% 
-  filter(disposition %in% c("Closed without arrest", "Open/No arrest")) %>% 
-  group_by(city) %>% 
-  summarize(unsolve_count = n()) %>% 
-  distinct()
-
-#join
-df = left_join(df,unsolved,by ="city") 
 ```
 
-This `df ` data set is recording the  data included the location of the killing, whether an arrest was made and, in most cases, basic demographic information about each victim. There are `r nrow(df)` observations in the datt set and `r ncol(df)` variables in the data set.
+The Washington Post data on homicides in 50 large US cities contains  `r nrow(df_raw)`rows and `r ncol(df_raw)`variables, with uid, reported_date, victim_last, victim_first, victim_race, victim_age, victim_sex, city, state, lat, lon, disposition.
+
+Lets focus on Baltimore
 
 ```{r}
-#creat a new data set
-df_2 = df %>% 
-  select(city_state,count,unsolve_count) %>% 
-  distinct()
+baltimore_df = 
+  df %>% 
+  filter(city_state == "Baltimore,MD")
 
-#prop.test ? how to estimate?
-bal_prop = prop.test(df_2 %>% filter(city_state == "Baltimore,MD") %>%  pull(unsolve_count),
-  df_2 %>% filter(city_state == "Baltimore,MD") %>%  pull(count))
-bal_prop %>% broom::tidy()
+baltimore_summary = 
+  baltimore_df %>% 
+  summarize(
+    unsolved = sum(resolution == "unsolved"),
+    n = n()
+  )
 
-#all cities
-results_df = 
-  df_2 %>% 
+baltimore_test = 
+  prop.test(
+  x = baltimore_summary %>% pull(unsolved),
+  n = baltimore_summary %>% pull(n)
+)
+
+baltimore_test %>% 
+  broom::tidy()
+```
+
+try to iterate
+
+```{r}
+
+#Create result_df
+result_df =
+  df_summary %>% 
   mutate(
-    prop_tests = map2(.x = unsolve_count, .y = count, ~prop.test(x = .x, n = .y)),
-    tidy_tests = map(.x = prop_tests, ~broom::tidy(.x))
+    test_results = map2(unsolved,n,prop.test),
+    tidy_results = map(test_results,broom::tidy)
   ) %>% 
-  select(-prop_tests) %>% 
-  unnest(tidy_tests) %>% 
-  select(city_state, estimate, conf.low, conf.high)#why always have city
+  select(city_state,tidy_results) %>% 
+  unnest(tidy_results) %>% 
+  select(city_state,estimate,starts_with("conf"))
 
-#plot why cannot reorder: must ungroup first
-results_df %>% 
-  ungroup() %>% 
-  mutate(city = fct_reorder(city_state, estimate)) %>% 
-  ggplot(aes(x = city, y = estimate)) +
+#plot the result
+result_df %>%  
+mutate(city_state = fct_reorder(city_state, estimate)) %>% 
+  ggplot(aes(x = city_state, y = estimate)) +
   geom_point() + 
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
   labs(
@@ -97,13 +121,16 @@ results_df %>%
     y = "unsolve cases",
     ) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
 ```
+
 
 
 # Problem 2
 
 ```{r,message=FALSE,warning=FALSE}
-list.files(path ="data/.")
+#list.files(path ="data/.")
+
 dat_path = str_c("data/",list.files(path ="data/."))
 
 lgt_df = 
@@ -128,6 +155,7 @@ lgt_df =
 lgt_df %>% 
  ggplot(aes(x = week, y = value, color =id))+
    facet_grid(. ~ arm)+
+   geom_point(alpha = 0.5) +
   geom_line()+
    labs(
     title = "comparison between groups",
@@ -149,6 +177,7 @@ iris_with_missing = iris %>%
   map_df(~replace(.x, sample(1:150, 20), NA)) %>%
   mutate(Species = as.character(Species))
 
+#create a function
 missing_replace = function(x) {
  
   if(is.numeric(x)){
@@ -159,8 +188,7 @@ missing_replace = function(x) {
   }
 }
 
-
-
+#apply function to missing data set
 iris_with_replace=map(iris_with_missing, missing_replace)
 
 
