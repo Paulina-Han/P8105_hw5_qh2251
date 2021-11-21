@@ -91,7 +91,8 @@ baltimore_test =
 )
 
 baltimore_test %>% 
-  broom::tidy()
+  broom::tidy() %>% 
+  select(estimate, conf.low, conf.high)
 ```
 
 try to iterate
